@@ -1,0 +1,68 @@
+version: '3'
+
+services:
+  postgresql:
+    image: postgres
+    container_name: database
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=admin123
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    networks:
+      - web-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    image: migrate/migrate
+    container_name: migrations
+    networks:
+      - web-net
+    volumes:
+      - ./schema:/schema
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    command: ["-path", "./schema", "-database", "postgres://postgres:admin123@postgresql:5432/postgres?sslmode=disable", "up"]
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    command: ["redis-server", "--requirepass", ""]
+    depends_on:
+      - migrate
+    networks:
+      - web-net
+    ports:
+      - "6379:6379"
+
+  service:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: service-dev:local
+    container_name: service
+    depends_on:
+      - migrate
+    networks:
+      - web-net
+    environment:
+      POSTGRES_HOST: postgresql
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin123
+      AWS_ACCESS_KEY_ID:
+      AWS_SECRET_ACCESS_KEY:
+      AWS_REGION: 
+      AWS_ENDPOINT_URL:
+    ports:
+      - "30001:30001"
+
+networks:
+  web-net:
+    driver: bridge
